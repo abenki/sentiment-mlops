@@ -233,7 +233,7 @@ def train(
         # Log the model in MLflow
         mlflow.sklearn.log_model(
             model,
-            artifact_path="model",
+            name="model",
             registered_model_name="sentiment-classifier",
             input_example=input_example
         )
