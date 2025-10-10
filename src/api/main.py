@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -11,7 +12,6 @@ import logging
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from fastapi.responses import Response
 
-from src.models.sentiment_model import SentimentModel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -123,6 +123,31 @@ model_version = None
 start_time = time.time()
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handles app lifecycle (startup and shutdown)"""
+    # Startup
+    logger.info("Starting Sentiment Analysis API...")
+    load_model()
+    logger.info("API ready to serve predictions")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down Sentiment Analysis API...")
+    # Cleanup if necessary (e.g., close DB connections)
+
+
+
+app = FastAPI(
+    title="Sentiment Analysis API",
+    description="API for sentiment analysis",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan
+)
+
 def load_model():
     """Load the sentiment analysis model"""
     global model, model_version
@@ -149,14 +174,6 @@ def load_model():
     except Exception as e:
         logger.error(f"Error loading model: {e}")
         raise
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Startup event for the application"""
-    logger.info("Starting Sentiment Analysis API...")
-    load_model()
-    logger.info("API ready to serve predictions")
 
 
 @app.get("/", tags=["Root"])
