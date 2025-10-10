@@ -24,30 +24,30 @@ from src.models.sentiment_model import SentimentModel
 
 
 def load_data(sample_size=None):
-    """Charge le dataset IMDB"""
-    print("Chargement du dataset IMDB...")
+    """Loads the IMDB dataset from Hugging Face"""
+    print("Loading IMDB dataset...")
     dataset = load_dataset("imdb")
     
     train_data = pd.DataFrame(dataset['train'])
     test_data = pd.DataFrame(dataset['test'])
     
     if sample_size:
-        print(f"Utilisation d'un échantillon de {sample_size} samples pour le train")
+        print(f"Using a sample of {sample_size} samples for training")
         train_data = train_data.sample(n=sample_size, random_state=42)
     
     return train_data, test_data
 
 
 def preprocess_text(text):
-    """Preprocessing basique du texte"""
-    # Supprimer les balises HTML
+    """Basic text preprocessing"""
+    # Remove HTML tags
     text = text.replace('<br />', ' ')
     text = text.replace('<br/>', ' ')
     return text
 
 
 def compute_metrics(y_true, y_pred, y_pred_proba):
-    """Calcule toutes les métriques"""
+    """Calculates all metrics"""
     metrics = {
         'accuracy': accuracy_score(y_true, y_pred),
         'precision': precision_score(y_true, y_pred),
@@ -55,8 +55,8 @@ def compute_metrics(y_true, y_pred, y_pred_proba):
         'f1_score': f1_score(y_true, y_pred),
         'roc_auc': roc_auc_score(y_true, y_pred_proba[:, 1])
     }
-    
-    # Matrice de confusion
+
+    # Confusion matrix
     cm = confusion_matrix(y_true, y_pred)
     metrics['true_negatives'] = int(cm[0, 0])
     metrics['false_positives'] = int(cm[0, 1])
@@ -74,17 +74,17 @@ def train(
     experiment_name="sentiment-analysis",
     run_name=None
 ):
-    """Fonction principale d'entraînement avec MLflow tracking"""
-    
-    # Configuration MLflow
+    """Main training function with MLflow tracking"""
+
+    # MLflow configuration
     mlflow.set_experiment(experiment_name)
-    
-    # Démarrer le run MLflow
+
+    # Start MLflow run
     with mlflow.start_run(run_name=run_name):
         
-        # 1. CHARGEMENT DES DONNÉES
+        # 1. DATA LOADING
         print("\n" + "="*80)
-        print("CHARGEMENT DES DONNÉES")
+        print("DATA LOADING")
         print("="*80)
         
         train_data, test_data = load_data(sample_size=sample_size)
@@ -124,38 +124,38 @@ def train(
         mlflow.log_param("max_features", max_features)
         mlflow.log_param("C", C)
         
-        # 3. ENTRAÎNEMENT
+        # 3. TRAINING
         print("\n" + "="*80)
-        print("ENTRAÎNEMENT")
+        print("TRAINING")
         print("="*80)
         
         model = SentimentModel(max_features=max_features, C=C)
-        
-        print("Entraînement du modèle...")
+
+        print("Training the model...")
         start_time = datetime.now()
         model.fit(X_train, y_train)
         training_time = (datetime.now() - start_time).total_seconds()
-        
-        print(f"Entraînement terminé en {training_time:.2f}s")
+
+        print(f"Training completed in {training_time:.2f}s")
         mlflow.log_metric("training_time_seconds", training_time)
-        
-        # 4. ÉVALUATION
+
+        # 4. EVALUATION
         print("\n" + "="*80)
-        print("ÉVALUATION")
+        print("EVALUATION")
         print("="*80)
-        
-        # Prédictions
-        print("\nÉvaluation sur le set de validation...")
+
+        # Predictions
+        print("\nEvaluating on validation set...")
         y_val_pred = model.predict(X_val)
         y_val_pred_proba = model.predict_proba(X_val)
         val_metrics = compute_metrics(y_val, y_val_pred, y_val_pred_proba)
-        
-        print("\nÉvaluation sur le set de test...")
+
+        print("\nEvaluating on test set...")
         y_test_pred = model.predict(X_test)
         y_test_pred_proba = model.predict_proba(X_test)
         test_metrics = compute_metrics(y_test, y_test_pred, y_test_pred_proba)
-        
-        # Afficher les résultats
+
+        # Display results
         print("\n--- VALIDATION METRICS ---")
         for metric, value in val_metrics.items():
             if not metric.startswith('true_') and not metric.startswith('false_'):
@@ -165,8 +165,8 @@ def train(
         for metric, value in test_metrics.items():
             if not metric.startswith('true_') and not metric.startswith('false_'):
                 print(f"{metric}: {value:.4f}")
-        
-        # Log metrics dans MLflow
+
+        # Log metrics in MLflow
         for metric, value in val_metrics.items():
             mlflow.log_metric(f"val_{metric}", value)
         
@@ -176,39 +176,39 @@ def train(
         # Classification report
         print("\n--- CLASSIFICATION REPORT (TEST) ---")
         print(classification_report(y_test, y_test_pred, target_names=['Negative', 'Positive']))
-        
-        # 5. SAUVEGARDE DU MODÈLE
+
+        # 5. MODEL SAVING AND LOGGING
         print("\n" + "="*80)
-        print("SAUVEGARDE")
+        print("MODEL SAVING AND LOGGING")
         print("="*80)
-        
-        # Créer le dossier models s'il n'existe pas
+
+        # Create the models directory if it doesn't exist
         model_dir = Path("models")
         model_dir.mkdir(exist_ok=True)
-        
-        # Sauvegarder localement
+
+        # Save locally
         model_path = model_dir / "sentiment_model.joblib"
         joblib.dump(model, model_path)
-        print(f"Modèle sauvegardé localement: {model_path}")
-        
-        # Créer un input example pour la signature
+        print(f"Model saved locally: {model_path}")
+
+        # Create an input example for the signature
         input_example = X_test[:5]
-        
-        # Logger le modèle dans MLflow avec signature
+
+        # Log the model in MLflow
         mlflow.sklearn.log_model(
             model,
             name="model",
             registered_model_name="sentiment-classifier",
             input_example=input_example
         )
-        print("Modèle enregistré dans MLflow")
-        
-        # Logger le vectorizer séparément pour inspection
+        print("Model registered in MLflow")
+
+        # Log the vectorizer separately for inspection
         vectorizer_path = model_dir / "vectorizer.joblib"
         joblib.dump(model.vectorizer, vectorizer_path)
         mlflow.log_artifact(str(vectorizer_path))
-        
-        # Logger des exemples de prédictions
+
+        # Log prediction examples
         sample_predictions = pd.DataFrame({
             'text': X_test[:10],
             'true_label': y_test[:10],
@@ -219,16 +219,16 @@ def train(
         sample_pred_path = model_dir / "sample_predictions.csv"
         sample_predictions.to_csv(sample_pred_path, index=False)
         mlflow.log_artifact(str(sample_pred_path))
-        
-        # Logger les feature names (mots les plus importants)
+
+        # Log feature names (most important words)
         feature_names = model.vectorizer.get_feature_names_out()
         coefficients = model.classifier.coef_[0]
-        
-        # Top features positives
+
+        # Top positive features
         top_positive_idx = np.argsort(coefficients)[-20:]
         top_positive = [(feature_names[i], coefficients[i]) for i in top_positive_idx]
-        
-        # Top features négatives
+
+        # Top negative features
         top_negative_idx = np.argsort(coefficients)[:20]
         top_negative = [(feature_names[i], coefficients[i]) for i in top_negative_idx]
         
@@ -241,9 +241,9 @@ def train(
         with open(features_path, 'w') as f:
             json.dump(features_info, f, indent=2)
         mlflow.log_artifact(str(features_path))
-        
-        print("\n✓ Entraînement terminé avec succès!")
-        print(f"✓ Run ID: {mlflow.active_run().info.run_id}")
+
+        print("\nTraining completed successfully!")
+        print(f"Run ID: {mlflow.active_run().info.run_id}")
         
         return model, test_metrics
 
